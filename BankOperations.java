@@ -138,6 +138,7 @@ public class BankOperations {
 
 	// Verify PIN for User ID (3 attempts)
 	public boolean verifyTransactionPinByUserId(String userId, Scanner scanner) throws SQLException {
+		
 		String sql = "SELECT transaction_pin FROM account WHERE userid = ?";
 		try (PreparedStatement ps = connection.prepareStatement(sql)) {
 			ps.setString(1, userId);
@@ -165,6 +166,7 @@ public class BankOperations {
 
 	// Verify PIN for Account Number (3 attempts)
 	public boolean verifyTransactionPinByAccountNumber(int accountNumber, Scanner scanner) throws SQLException {
+		
 		String sql = "SELECT transaction_pin FROM account WHERE accountnumber = ?";
 		try (PreparedStatement ps = connection.prepareStatement(sql)) {
 			ps.setInt(1, accountNumber);
@@ -246,10 +248,32 @@ public class BankOperations {
 		return -1;
 	}
 
+	public boolean isAccountActiveByUserId(String userId) throws SQLException {
+		String sql = "SELECT isActive FROM account WHERE userid=?";
+		try (PreparedStatement ps = connection.prepareStatement(sql)) {
+			ps.setString(1, userId);
+			try (ResultSet rs = ps.executeQuery()) {
+				return rs.next() && rs.getInt("isActive") == 1;
+			}
+		}
+	}
+
+	public boolean isAccountActiveByAccountNumber(Connection connection, int accountNumber) throws SQLException {
+		String sql = "SELECT isActive FROM account WHERE accountnumber = ?";
+		try (PreparedStatement ps = connection.prepareStatement(sql)) {
+			ps.setInt(1, accountNumber);
+			try (ResultSet rs = ps.executeQuery()) {
+				return rs.next() && rs.getInt("isActive") == 1;
+			}
+		}
+	}
+
 	// Deposit money by UserId, with PIN validation
 	public void depositMoneyUsingUserID(Scanner scanner, String userId) throws SQLException {
-		if (!verifyTransactionPinByUserId(userId, scanner))
+		if (!isAccountActiveByUserId(userId)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
 			return;
+		}
 
 		double amount;
 		while (true) {
@@ -260,6 +284,8 @@ public class BankOperations {
 					System.out.println("Deposit amount must be positive!");
 					continue;
 				}
+				if (!verifyTransactionPinByUserId(userId, scanner))
+					return;
 				break;
 			} catch (NumberFormatException e) {
 				System.out.println("Invalid amount! Please enter a valid number.");
@@ -280,7 +306,10 @@ public class BankOperations {
 
 	// Deposit money by Account Number, with PIN validation
 	public void depositMoneyUsingAccountNumber(Scanner scanner, int accountNumber) throws SQLException {
-
+		if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		double amount;
 		while (true) {
 			System.out.print("Enter the amount to deposit: ");
@@ -311,29 +340,34 @@ public class BankOperations {
 
 	// Withdraw money by UserId, with PIN validation
 	public void withdrawMoneyUsingUserID(Scanner scanner, String userId) throws SQLException {
-		if (!verifyTransactionPinByUserId(userId, scanner))
+		if (!isAccountActiveByUserId(userId)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
 			return;
+		}
 
 		double balance = getAccountBalance(userId);
 		double amount;
 
 		while (true) {
-			System.out.print("Enter the amount to withdraw: ");
-			try {
-				amount = Double.parseDouble(scanner.nextLine().trim());
-				if (amount <= 0) {
-					System.out.println("Withdrawal amount must be positive!");
-					continue;
-				}
-				if (balance < amount) {
-					System.out.println("Insufficient funds! Current balance: " + balance + " ₹.");
-					continue;
-				}
-				break;
-			} catch (NumberFormatException e) {
-				System.out.println("Invalid amount! Please enter a valid number.");
-			}
+		    System.out.print("Enter the amount to withdraw: ");
+		    if (!scanner.hasNextDouble()) {
+		        System.out.println("Invalid input! Please enter a valid amount.");
+		        scanner.nextLine();
+		        continue;
+		    }
+		    amount = scanner.nextDouble();
+		    scanner.nextLine();
+		    if (amount <= 0) {
+		        System.out.println("Withdrawal amount must be positive!");
+		        continue;
+		    }
+		    if (balance < amount) {
+		        System.out.println("Insufficient funds! Current balance: " + balance + " ₹.");
+		        continue;
+		    }
+		    break;
 		}
+
 
 		String sql = "UPDATE account SET balance = balance - ? WHERE userid = ?";
 		try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -349,27 +383,33 @@ public class BankOperations {
 
 	// Withdraw money by Account Number, with PIN validation
 	public void withdrawMoneyUsingAccountNumber(Scanner scanner, int accountNumber) throws SQLException {
-
+		if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		double balance = getAccountBalance(accountNumber);
 		double amount;
 
 		while (true) {
-			System.out.print("Enter the amount to withdraw: ");
-			try {
-				amount = Double.parseDouble(scanner.nextLine().trim());
-				if (amount <= 0) {
-					System.out.println("Withdrawal amount must be positive!");
-					continue;
-				}
-				if (balance < amount) {
-					System.out.println("Insufficient funds! Current balance: " + balance + " ₹.");
-					continue;
-				}
-				break;
-			} catch (NumberFormatException e) {
-				System.out.println("Invalid amount! Please enter a valid number.");
-			}
+		    System.out.print("Enter the amount to withdraw: ");
+		    if (!scanner.hasNextDouble()) {
+		        System.out.println("Invalid input! Please enter a valid amount.");
+		        scanner.nextLine();
+		        continue;
+		    }
+		    amount = scanner.nextDouble();
+		    scanner.nextLine();
+		    if (amount <= 0) {
+		        System.out.println("Withdrawal amount must be positive!");
+		        continue;
+		    }
+		    if (balance < amount) {
+		        System.out.println("Insufficient funds! Current balance: " + balance + " ₹.");
+		        continue;
+		    }
+		    break;
 		}
+
 		if (!verifyTransactionPinByAccountNumber(accountNumber, scanner))
 			return;
 		String sql = "UPDATE account SET balance = balance - ? WHERE accountnumber = ?";
@@ -386,7 +426,7 @@ public class BankOperations {
 
 	// Transfer money by UserId session with PIN
 	public void transferMoneyUsingUserID(Scanner scanner, String senderUserId) throws SQLException {
-
+		
 		String receiverUserId;
 		while (true) {
 			System.out.print("Enter Receiver User ID (name.surname@xxxx): ");
@@ -403,6 +443,10 @@ public class BankOperations {
 			if (!doesAccountExist(receiverUserId)) {
 				System.out.println("Receiver ID not found!");
 				continue;
+			}
+			if (!isAccountActiveByUserId(receiverUserId)) {
+				System.out.println("Account is inactive. Transaction not allowed.");
+				return;
 			}
 			break;
 		}
@@ -460,7 +504,10 @@ public class BankOperations {
 
 	// Transfer money by Account Number session with PIN
 	public void transferMoneyUsingAccountNumber(Scanner scanner, int senderAccountNumber) throws SQLException {
-
+		if (!isAccountActiveByAccountNumber(connection, senderAccountNumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		int receiverAccountNumber;
 		while (true) {
 			System.out.print("Enter Receiver Account Number: ");
@@ -534,6 +581,11 @@ public class BankOperations {
 	// Existing check balance on userId
 	public void checkBalanceonUserid(String accuserid) throws SQLException {
 		String balanceQuery = "SELECT balance FROM account WHERE userid = ?";
+		if (!isAccountActiveByUserId(accuserid)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
+
 		try (PreparedStatement ps = connection.prepareStatement(balanceQuery)) {
 			ps.setString(1, accuserid);
 			try (ResultSet rs = ps.executeQuery()) {
@@ -550,6 +602,10 @@ public class BankOperations {
 
 	// Displays the balance for given account number
 	public void checkBalanceonAccountnumber(int accountnumber) throws SQLException {
+		if (!isAccountActiveByAccountNumber(connection, accountnumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		String balanceQuery = "SELECT balance FROM account WHERE accountnumber = ?";
 		try (PreparedStatement ps = connection.prepareStatement(balanceQuery)) {
 			ps.setInt(1, accountnumber);
@@ -567,6 +623,15 @@ public class BankOperations {
 	}
 
 	public void viewTransactionsForAccountNumber(Scanner scanner, int accountNumber) {
+		try {
+			if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+				System.out.println("Account is inactive. Transaction not allowed.");
+				return;
+			}
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		while (true) {
 			System.out.println("\nView Transactions Menu");
 			System.out.println("1. View latest 5 transactions");
@@ -654,6 +719,16 @@ public class BankOperations {
 
 	// Display transaction history by user ID
 	public void viewTransactionsForUserId(Scanner scanner, String userId) {
+		try {
+			if (!isAccountActiveByUserId(userId)) {
+				System.out.println("Account is inactive. Transaction not allowed.");
+				return;
+			}
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
 		while (true) {
 			System.out.println("\nView Transactions Menu");
 			System.out.println("1. View latest 5 transactions");
@@ -748,6 +823,14 @@ public class BankOperations {
 			if (!userId.matches(regex)) {
 				System.out.println("Invalid format! Please enter as name.surname@xxxx.");
 				continue;
+			} try {
+				if (!isAccountActiveByUserId(userId)) {
+				    System.out.println("Your account is inactive and cannot perform transactions.");
+				    return;
+				}
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 			String sql = "SELECT accountnumber FROM account WHERE userid = ?";
 			try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -781,6 +864,15 @@ public class BankOperations {
 				System.out.println("Invalid account number! Please enter 4 digits.");
 				continue;
 			}
+			try {
+				if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+					System.out.println("Account is inactive. Transaction not allowed.");
+					return;
+				}
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 			String sql = "SELECT userid FROM account WHERE accountnumber = ?";
 			try (PreparedStatement ps = connection.prepareStatement(sql)) {
 				ps.setInt(1, accountNumber);
@@ -800,18 +892,91 @@ public class BankOperations {
 			}
 		}
 	}
+	public void deleteAccountByUserId(Scanner scanner, String userId) throws SQLException {
+		if (!isAccountActiveByUserId(userId)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
+		System.out.println("\n--- Delete Account ---");
+		System.out.println(
+				"Are you sure you want to delete (deactivate) your account? This cannot be undone from the app.");
+		System.out.print("Enter your password to confirm: ");
+		String passwordInput = scanner.nextLine();
+
+		String checkSql = "SELECT password FROM account WHERE userid=? AND isActive=1";
+		try (PreparedStatement ps = connection.prepareStatement(checkSql)) {
+			ps.setString(1, userId);
+			try (ResultSet rs = ps.executeQuery()) {
+				if (!rs.next() || !rs.getString("password").equals(passwordInput)) {
+					System.out.println("Incorrect password or account not active. Account not deleted.");
+					return;
+				}
+			}
+		}
+
+		String updateSql = "UPDATE account SET isActive=0 WHERE userid=?";
+		try (PreparedStatement ps = connection.prepareStatement(updateSql)) {
+			ps.setString(1, userId);
+			int updated = ps.executeUpdate();
+			if (updated > 0) {
+				System.out.println("Your account has been deactivated (deleted). We’re sorry to see you go.");
+			} else {
+				System.out.println("Account could not be deleted.");
+			}
+		}
+	}
+	
+	public void deleteAccountByAccountNumber(Scanner scanner, int accountNumber) throws SQLException {
+	    
+		System.out.println("\n--- Delete Account ---");
+	    System.out.println("Are you sure you want to delete (deactivate) your account? This cannot be undone from the app.");
+	    System.out.print("Enter your password to confirm: ");
+	    String passwordInput = scanner.nextLine();
+
+	    // Confirm password and active status
+	    String checkSql = "SELECT password FROM account WHERE accountnumber = ? AND isActive = 1";
+	    try (PreparedStatement ps = connection.prepareStatement(checkSql)) {
+	        ps.setInt(1, accountNumber);
+	        try (ResultSet rs = ps.executeQuery()) {
+	            if (!rs.next() || !rs.getString("password").equals(passwordInput)) {
+	                System.out.println("Incorrect password or account not active. Account not deleted.");
+	                return;
+	            }
+	        }
+	    }
+
+	    String updateSql = "UPDATE account SET isActive = 0 WHERE accountnumber = ?";
+	    try (PreparedStatement ps = connection.prepareStatement(updateSql)) {
+	        ps.setInt(1, accountNumber);
+	        int updated = ps.executeUpdate();
+	        if (updated > 0) {
+	            System.out.println("Your account has been deactivated (deleted). We’re sorry to see you go.");
+	        } else {
+	            System.out.println("Account could not be deleted.");
+	        }
+	    }
+	}
 
 	public void showProfileMenuByAccountNumber(Scanner scanner, int accountNumber) throws SQLException {
+		if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		while (true) {
 			System.out.println("\n--- Profile Menu ---");
 			System.out.println("1. View Account Details");
 			System.out.println("2. Change PIN or Password");
 			System.out.println("3. Edit name");
-			System.out.println("4. Back");
+			System.out.println("4. Delete Account");
+			System.out.println("5. Back");
 			System.out.print("Select option: ");
 			String opt = scanner.nextLine().trim();
 
 			if (opt.equals("1")) {
+				if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+					System.out.println("Account is inactive. Transaction not allowed.");
+					return;
+				}
 				String sql = "SELECT accountnumber, name, surname, balance, userid, transaction_pin FROM account WHERE accountnumber = ?";
 				try (PreparedStatement ps = connection.prepareStatement(sql)) {
 					ps.setInt(1, accountNumber);
@@ -834,9 +999,11 @@ public class BankOperations {
 			} else if (opt.equals("3")) {
 				editNameByAccountNumber(scanner, accountNumber);
 
+			}else if(opt.equals("4")) {
+				deleteAccountByAccountNumber(scanner, accountNumber);
 			}
 
-			else if (opt.equals("4")) {
+			else if (opt.equals("5")) {
 				return;
 			} else {
 				System.out.println("Invalid option. Please enter 1-3.");
@@ -845,16 +1012,22 @@ public class BankOperations {
 	}
 
 	public void showProfileMenuByUserId(Scanner scanner, String userId) throws SQLException {
+		
 		while (true) {
 			System.out.println("\n--- Profile Menu ---");
 			System.out.println("1. View Account Details");
 			System.out.println("2. Change PIN or Password");
 			System.out.println("3. Edit name ");
-			System.out.println("4. Back");
+			System.out.println("4. Delete Account");
+			System.out.println("5. Back");
 			System.out.print("Select option: ");
 			String opt = scanner.nextLine().trim();
 
 			if (opt.equals("1")) {
+				if (!isAccountActiveByUserId(userId)) {
+					System.out.println("Account is inactive. Transaction not allowed.");
+					return;
+				}
 				String sql = "SELECT accountnumber, name, surname, balance, userid, transaction_pin FROM account WHERE userid = ?";
 				try (PreparedStatement ps = connection.prepareStatement(sql)) {
 					ps.setString(1, userId);
@@ -876,9 +1049,11 @@ public class BankOperations {
 				changePinOrPasswordByUserId(scanner, userId);
 			} else if (opt.equals("3")) {
 				editNameByUserId(scanner, userId);
+			} else if (opt.equals("4")) {
+				deleteAccountByUserId(scanner, userId);
 			}
 
-			else if (opt.equals("4")) {
+			else if (opt.equals("5")) {
 				return;
 			} else {
 				System.out.println("Invalid option. Please enter 1-3.");
@@ -886,7 +1061,13 @@ public class BankOperations {
 		}
 	}
 
+	
+
 	public void changePinOrPasswordByUserId(Scanner scanner, String userId) throws SQLException {
+		if (!isAccountActiveByUserId(userId)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		while (true) {
 			System.out.println("\nChange:");
 			System.out.println("1. Password");
@@ -986,6 +1167,10 @@ public class BankOperations {
 	}
 
 	public void changePinOrPasswordByAccountnumber(Scanner scanner, int accountNumber) throws SQLException {
+		if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		while (true) {
 			System.out.println("\nChange:");
 			System.out.println("1. Password");
@@ -1099,6 +1284,11 @@ public class BankOperations {
 	}
 
 	public void editNameByUserId(Scanner scanner, String userId) throws SQLException {
+		if (!isAccountActiveByUserId(userId)) {
+		    System.out.println("Account is inactive. Transaction not allowed.");
+		    return;
+		}
+
 		// Ask password to validate
 		System.out.print("Enter your current password to proceed: ");
 		String passwordInput = scanner.nextLine();
@@ -1147,6 +1337,10 @@ public class BankOperations {
 	}
 
 	public void editNameByAccountNumber(Scanner scanner, int accountNumber) throws SQLException {
+		if (!isAccountActiveByAccountNumber(connection, accountNumber)) {
+			System.out.println("Account is inactive. Transaction not allowed.");
+			return;
+		}
 		// Ask password to validate
 		System.out.print("Enter your current password to proceed: ");
 		String passwordInput = scanner.nextLine();
